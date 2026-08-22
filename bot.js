@@ -1,4 +1,4 @@
-const { Client, GatewayIntentBits, ChannelType, PermissionFlagsBits, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
+const { Client, GatewayIntentBits, ChannelType, PermissionFlagsBits, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, REST, Routes, SlashCommandBuilder } = require('discord.js');
 const http = require('http');
 
 // Lightweight HTTP server for Cloud Hosting platforms (Render / Koyeb / Railway)
@@ -19,6 +19,15 @@ const client = new Client({
 const TOKEN = process.env.DISCORD_TOKEN || 'YOUR_BOT_TOKEN_HERE';
 const GUILD_ID = '1540310872520396800';
 
+function isStaffMember(member, guild) {
+  if (!member) return false;
+  if (member.id === guild.ownerId) return true;
+  if (member.permissions.has(PermissionFlagsBits.Administrator)) return true;
+  if (member.permissions.has(PermissionFlagsBits.ManageChannels)) return true;
+  if (member.permissions.has(PermissionFlagsBits.ManageMessages)) return true;
+  return member.roles.cache.some(r => r.name.includes('Aegis Director') || r.name.includes('Bunker Warden'));
+}
+
 client.once('ready', async () => {
   console.log(`[A.E.G.I.S. Mainframe] Online as ${client.user.tag}!`);
   
@@ -34,8 +43,35 @@ client.once('ready', async () => {
       await guild.members.me.setNickname('A.E.G.I.S.');
       console.log('Server nickname verified: A.E.G.I.S.');
     }
-  } catch (e) {
-    // Ignore
+  } catch (e) {}
+
+  // Register Slash Commands automatically
+  try {
+    const commands = [
+      new SlashCommandBuilder()
+        .setName('clear')
+        .setDescription('Cleans and purges messages in the current channel (Staff Only)')
+        .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages)
+        .addIntegerOption(opt =>
+          opt.setName('amount')
+            .setDescription('Number of messages to delete (1 - 100)')
+            .setMinValue(1)
+            .setMaxValue(100)
+            .setRequired(false)
+        ),
+      new SlashCommandBuilder()
+        .setName('status')
+        .setDescription('Displays Sector-4 Bunker Telemetry, Power Grid & Spore Gauge'),
+      new SlashCommandBuilder()
+        .setName('help')
+        .setDescription('Displays the A.E.G.I.S. Mainframe commands and guide')
+    ].map(cmd => cmd.toJSON());
+
+    const rest = new REST({ version: '10' }).setToken(TOKEN);
+    await rest.put(Routes.applicationGuildCommands(client.user.id, GUILD_ID), { body: commands });
+    console.log('Guild slash commands registered successfully.');
+  } catch (err) {
+    console.error('Error auto-registering slash commands:', err.message);
   }
 
   // 1. Roles Definition
@@ -47,12 +83,18 @@ client.once('ready', async () => {
     { name: '[🤖] Bots', color: '#546E7A', hoist: true },
     { name: '[🧪] Radiant Zéro', color: '#9B59B6', hoist: true },
     { name: '[⭐] VIP', color: '#F1C40F', hoist: true },
-    // Classes
-    { name: '[🔫] Commando', color: '#E67E22', hoist: false },
-    { name: '[💉] Virologist', color: '#1ABC9C', hoist: false },
-    { name: '[⚙️] Engineer', color: '#F1C40F', hoist: false },
-    { name: '[⛏️] Miner', color: '#34495E', hoist: false },
+    // 9 Classes
+    { name: '[⚔️] Assault Soldier', color: '#2ECC71', hoist: false },
+    { name: '[💥] Demolition Miner', color: '#E67E22', hoist: false },
+    { name: '[💉] Combat Medic', color: '#00E5FF', hoist: false },
+    { name: '[🛡️] Defense Engineer', color: '#F1C40F', hoist: false },
+    { name: '[🎯] Recon Marksman', color: '#27AE60', hoist: false },
+    { name: '[🔨] Tactical Armorer', color: '#9B59B6', hoist: false },
+    { name: '[💣] Heavy Commando', color: '#E74C3C', hoist: false },
+    { name: '[🧪] Chemical Virologist', color: '#1ABC9C', hoist: false },
+    { name: '[🔮] Radiant Symbiote', color: '#9B59B6', hoist: false },
     // Languages
+    { name: '[🇬🇧] English', color: '#3498DB', hoist: false },
     { name: '[🇫🇷] Français', color: '#3498DB', hoist: false },
     { name: '[🇩🇪] Deutsch', color: '#E67E22', hoist: false },
     { name: '[🇷🇺] Русский', color: '#E74C3C', hoist: false },
@@ -78,9 +120,7 @@ client.once('ready', async () => {
           permissions: r.permissions || [],
           reason: 'BIO-OUTBREAK setup'
         });
-      } catch (err) {
-        // ignore
-      }
+      } catch (err) {}
     }
     if (role) {
       roleMap[r.name] = role;
@@ -88,9 +128,6 @@ client.once('ready', async () => {
   }
 
   const botRole = roleMap['[🤖] Bots'];
-  const prisonerRole = roleMap['[⛓️] Prisoner'];
-
-  // Auto assign bot role to bots
   if (botRole) {
     try {
       guild.members.cache.forEach(async member => {
@@ -98,61 +135,64 @@ client.once('ready', async () => {
           await member.roles.add(botRole).catch(() => {});
         }
       });
-    } catch (err) {
-      // ignore
-    }
-  }
-
-  // Ensure Prisoner overrides
-  if (prisonerRole) {
-    const channels = await guild.channels.fetch();
-    for (const [id, ch] of channels) {
-      if (ch.type === ChannelType.GuildText || ch.type === ChannelType.GuildVoice || ch.type === ChannelType.GuildForum) {
-        if (ch.parent && (ch.parent.name === '🔒 WARDENS HEADQUARTERS' || ch.parent.name === '🤫 ARCHITECTS BUNKER')) continue;
-        try {
-          await ch.permissionOverwrites.edit(prisonerRole.id, {
-            SendMessages: false,
-            SendMessagesInThreads: false,
-            AddReactions: false,
-            CreatePublicThreads: false,
-            CreatePrivateThreads: false,
-            Connect: false
-          });
-        } catch (err) {}
-      }
-    }
-  }
-
-  // Post Terminal Hub in #bot-commands
-  const staffCategory = guild.channels.cache.find(c => c.name === '🔒 WARDENS HEADQUARTERS' && c.type === ChannelType.GuildCategory);
-  if (staffCategory) {
-    const cmdChannel = guild.channels.cache.find(c => c.name === 'bot-commands' && c.parentId === staffCategory.id);
-    if (cmdChannel) {
-      const msgs = await cmdChannel.messages.fetch({ limit: 5 });
-      if (msgs.size === 0) {
-        const terminalRow = new ActionRowBuilder().addComponents(
-          new ButtonBuilder().setCustomId('btn_status').setLabel('Sector-4 Status').setStyle(ButtonStyle.Primary).setEmoji('📊'),
-          new ButtonBuilder().setCustomId('btn_alarm_yellow').setLabel('Alarm: Yellow').setStyle(ButtonStyle.Secondary).setEmoji('⚠️'),
-          new ButtonBuilder().setCustomId('btn_alarm_red').setLabel('Alarm: Red Alert').setStyle(ButtonStyle.Danger).setEmoji('🚨')
-        );
-
-        await cmdChannel.send({
-          content: `# 🖥️ A.E.G.I.S. TERMINAL COMMAND CONSOLE\nUse the buttons below to trigger automated bunker broadcasts or view real-time telemetry from Sector-4:`,
-          components: [terminalRow]
-        });
-      }
-    }
+    } catch (err) {}
   }
 
   console.log('[A.E.G.I.S. Mainframe] System fully operational.');
 });
 
-// Handle Interactions
+// Handle All Interactions (Slash Commands, Modals, Buttons)
 client.on('interactionCreate', async interaction => {
   const guild = interaction.guild;
   const user = interaction.user;
 
-  // 1. Modal Submission Handling (Close Ticket with Name & Reason)
+  // 1. Slash Commands Handling (/clear, /status, /help)
+  if (interaction.isChatInputCommand()) {
+    const member = await guild.members.fetch(user.id);
+    const { commandName } = interaction;
+
+    if (commandName === 'clear') {
+      if (!isStaffMember(member, guild)) {
+        return interaction.reply({ content: '❌ Access Denied: Only Bunker Wardens and Aegis Directors can use /clear.', ephemeral: true });
+      }
+
+      const amount = interaction.options.getInteger('amount') || 100;
+      try {
+        const deleted = await interaction.channel.bulkDelete(amount, true);
+        return interaction.reply({ content: `🧹 Successfully purged **${deleted.size}** messages from this channel.`, ephemeral: true });
+      } catch (err) {
+        return interaction.reply({ content: `Failed to clear messages: ${err.message}`, ephemeral: true });
+      }
+    }
+
+    if (commandName === 'status') {
+      return interaction.reply({
+        content: `\`\`\`prolog
+================================================================================
+           A.E.G.I.S. SECTOR-4 MAINFRAME TELEMETRY REPORT
+================================================================================
+[STATUS]                : ACTIVE (DEFENSES ONLINE)
+[POWER GRID]            : 87.4% (GENERATOR STABLE)
+[BIO-CANNON]            : 32.0% CHARGED (GPS MODULE REQUIRED)
+[SPORE GAUGE]           : TIER II (+20% HORDE HP/DMG)
+[ATMOSPHERE]            : GREEN ZONE (0% TOX) | YELLOW ZONE (MODERATE) | RED ZONE (LETHAL)
+[QUARANTINE CELL]       : 0 CONTAINED
+[PATIENT-ZERO SIGNAL]   : DETECTED (DIRECTOR 4GKP / CONSCIOUSNESS STABLE)
+================================================================================
+\`\`\``,
+        ephemeral: true
+      });
+    }
+
+    if (commandName === 'help') {
+      return interaction.reply({
+        content: `# 🖥️ A.E.G.I.S. Mainframe Commands\n- \`/clear [amount]\` : Purge messages in current channel (Staff Only)\n- \`/status\` : View live Sector-4 bunker telemetry\n- \`/help\` : View this command guide`,
+        ephemeral: true
+      });
+    }
+  }
+
+  // 2. Modal Submission Handling (Close Ticket with Name & Reason)
   if (interaction.isModalSubmit()) {
     if (interaction.customId === 'modal_close_ticket') {
       const userName = interaction.fields.getTextInputValue('ticket_user_name') || 'Unknown';
@@ -190,11 +230,12 @@ client.on('interactionCreate', async interaction => {
     }
   }
 
+  // 3. Button Interactions Handling
   if (!interaction.isButton()) return;
 
   const member = await guild.members.fetch(user.id);
 
-  // 0. Rules Verification Button
+  // A. Rules Verification Button
   if (interaction.customId === 'verify_rules') {
     const survivorRole = guild.roles.cache.find(r => r.name.includes('Survivor'));
     const classChannel = guild.channels.cache.find(c => c.name.includes('class-selection'));
@@ -223,7 +264,7 @@ client.on('interactionCreate', async interaction => {
     return interaction.reply({ content: 'Survivor role not found.', ephemeral: true });
   }
 
-  // 1. Terminal Buttons
+  // B. Terminal Status / Alarm Buttons
   if (interaction.customId === 'btn_status') {
     return interaction.reply({
       content: `\`\`\`prolog
@@ -259,7 +300,7 @@ client.on('interactionCreate', async interaction => {
     return interaction.reply({ content: 'Broadcasted Code Red Alert.', ephemeral: true });
   }
 
-  // 2. Class Selection Buttons (9 In-Game Classes)
+  // C. Class Selection Buttons (9 Classes)
   if (interaction.customId.startsWith('role_')) {
     const classNameMap = {
       'role_assault_soldier': '[⚔️] Assault Soldier',
@@ -271,7 +312,7 @@ client.on('interactionCreate', async interaction => {
       'role_heavy_commando': '[💣] Heavy Commando',
       'role_chemical_virologist': '[🧪] Chemical Virologist',
       'role_radiant_symbiote': '[🔮] Radiant Symbiote',
-      // Legacy fallbacks
+      // Legacy
       'role_commando': '[⚔️] Assault Soldier',
       'role_virologist': '[🧪] Chemical Virologist',
       'role_engineer': '[🛡️] Defense Engineer',
@@ -296,60 +337,59 @@ client.on('interactionCreate', async interaction => {
     }
   }
 
-    // 3. Language Selection Buttons
-    if (interaction.customId.startsWith('lang_')) {
-      const langMap = {
-        'lang_en': '[🇬🇧] English',
-        'lang_fr': '[🇫🇷] Français',
-        'lang_de': '[🇩🇪] Deutsch',
-        'lang_ru': '[🇷🇺] Русский',
-        'lang_pl': '[🇵🇱] Polski',
-        'lang_es': '[🇪🇸] Español',
-        'lang_pt': '[🇧🇷] Português'
-      };
+  // D. Language Selection Buttons (7 Languages)
+  if (interaction.customId.startsWith('lang_')) {
+    const langMap = {
+      'lang_en': '[🇬🇧] English',
+      'lang_fr': '[🇫🇷] Français',
+      'lang_de': '[🇩🇪] Deutsch',
+      'lang_ru': '[🇷🇺] Русский',
+      'lang_pl': '[🇵🇱] Polski',
+      'lang_es': '[🇪🇸] Español',
+      'lang_pt': '[🇧🇷] Português'
+    };
 
-      const targetRoleName = langMap[interaction.customId];
-      const role = guild.roles.cache.find(r => r.name === targetRoleName);
+    const targetRoleName = langMap[interaction.customId];
+    const role = guild.roles.cache.find(r => r.name === targetRoleName);
 
-      if (!role) return interaction.reply({ content: 'Language role not found.', ephemeral: true });
+    if (!role) return interaction.reply({ content: 'Language role not found.', ephemeral: true });
 
-      try {
-        if (member.roles.cache.has(role.id)) {
-          await member.roles.remove(role);
-          return interaction.reply({ content: `Removed **${targetRoleName}** channel access.`, ephemeral: true });
-        } else {
-          await member.roles.add(role);
-          return interaction.reply({ content: `Unlocked **${targetRoleName}** channel in **🌐 INTERNATIONAL SECTORS**!`, ephemeral: true });
-        }
-      } catch (err) {
-        return interaction.reply({ content: 'Failed to update language role.', ephemeral: true });
+    try {
+      if (member.roles.cache.has(role.id)) {
+        await member.roles.remove(role);
+        return interaction.reply({ content: `Removed **${targetRoleName}** channel access.`, ephemeral: true });
+      } else {
+        await member.roles.add(role);
+        return interaction.reply({ content: `Unlocked **${targetRoleName}** channel in **🌐 INTERNATIONAL SECTORS**!`, ephemeral: true });
       }
+    } catch (err) {
+      return interaction.reply({ content: 'Failed to update language role.', ephemeral: true });
+    }
+  }
+
+  // E. Ticket Creation Button (Anti-Duplication)
+  if (interaction.customId === 'create_ticket') {
+    const ticketChannelName = `ticket-${user.username.toLowerCase()}`;
+    const existingChannel = guild.channels.cache.find(c => c.name.toLowerCase() === ticketChannelName.toLowerCase());
+    if (existingChannel) {
+      return interaction.reply({ content: `You already have an active support ticket: <#${existingChannel.id}>`, ephemeral: true });
     }
 
-    // Staff roles for tickets
+    let ticketCategory = guild.channels.cache.find(c => c.name.includes('ACTIVE TICKETS') && c.type === ChannelType.GuildCategory);
+    if (!ticketCategory) {
+      try {
+        ticketCategory = await guild.channels.create({
+          name: '🎫 ACTIVE TICKETS',
+          type: ChannelType.GuildCategory
+        });
+      } catch (err) {
+        return interaction.reply({ content: 'Failed to create ticket category.', ephemeral: true });
+      }
+    }
+    
     const adminRole = guild.roles.cache.find(r => r.name.includes('Aegis Director'));
     const wardenRole = guild.roles.cache.find(r => r.name.includes('Bunker Warden'));
 
-    // 4. Ticket Creation Button (With Anti-Duplication Lock)
-    if (interaction.customId === 'create_ticket') {
-      const ticketChannelName = `ticket-${user.username.toLowerCase()}`;
-      const existingChannel = guild.channels.cache.find(c => c.name.toLowerCase() === ticketChannelName.toLowerCase());
-      if (existingChannel) {
-        return interaction.reply({ content: `You already have an active support ticket: <#${existingChannel.id}>`, ephemeral: true });
-      }
-
-      let ticketCategory = guild.channels.cache.find(c => c.name.includes('ACTIVE TICKETS') && c.type === ChannelType.GuildCategory);
-      if (!ticketCategory) {
-        try {
-          ticketCategory = await guild.channels.create({
-            name: '🎫 ACTIVE TICKETS',
-            type: ChannelType.GuildCategory
-          });
-        } catch (err) {
-          return interaction.reply({ content: 'Failed to create ticket category.', ephemeral: true });
-        }
-      }
-    
     try {
       const channel = await guild.channels.create({
         name: ticketChannelName,
@@ -364,14 +404,14 @@ client.on('interactionCreate', async interaction => {
             id: user.id,
             allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory]
           },
-          {
+          ...(adminRole ? [{
             id: adminRole.id,
             allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory]
-          },
-          {
+          }] : []),
+          ...(wardenRole ? [{
             id: wardenRole.id,
             allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory]
-          }
+          }] : [])
         ]
       });
       
@@ -410,11 +450,10 @@ client.on('interactionCreate', async interaction => {
     }
   }
   
-  // 5. Ticket Claim Button
+  // F. Ticket Claim Button (Staff Only)
   if (interaction.customId === 'claim_ticket') {
-    const hasStaffRole = member.roles.cache.some(r => r.name.includes('Aegis Director') || r.name.includes('Bunker Warden'));
-    if (!hasStaffRole) {
-      return interaction.reply({ content: '❌ Only Warden staff can claim tickets!', ephemeral: true });
+    if (!isStaffMember(member, guild)) {
+      return interaction.reply({ content: '❌ Access Denied: Only Bunker Wardens and Aegis Directors can claim tickets!', ephemeral: true });
     }
 
     const disabledClaimButton = new ButtonBuilder()
@@ -446,10 +485,9 @@ client.on('interactionCreate', async interaction => {
     } catch (err) {}
   }
 
-  // 6. Ticket Close Button (Staff Only - Opens Name & Reason Modal)
+  // G. Ticket Close Button (Staff Only - Opens Modal)
   if (interaction.customId === 'close_ticket') {
-    const hasStaffRole = member.roles.cache.some(r => r.name.includes('Aegis Director') || r.name.includes('Bunker Warden'));
-    if (!hasStaffRole) {
+    if (!isStaffMember(member, guild)) {
       return interaction.reply({ content: '❌ Access Denied: Only Bunker Wardens and Aegis Directors can close tickets!', ephemeral: true });
     }
 
