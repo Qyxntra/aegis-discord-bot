@@ -257,58 +257,59 @@ client.on('interactionCreate', async interaction => {
     }
   }
 
-  // 3. Language Selection Buttons
-  if (interaction.customId.startsWith('lang_')) {
-    const langMap = {
-      'lang_fr': '[🇫🇷] Français',
-      'lang_de': '[🇩🇪] Deutsch',
-      'lang_ru': '[🇷🇺] Русский',
-      'lang_pl': '[🇵🇱] Polski',
-      'lang_es': '[🇪🇸] Español',
-      'lang_pt': '[🇧🇷] Português'
-    };
+    // 3. Language Selection Buttons
+    if (interaction.customId.startsWith('lang_')) {
+      const langMap = {
+        'lang_en': '[🇬🇧] English',
+        'lang_fr': '[🇫🇷] Français',
+        'lang_de': '[🇩🇪] Deutsch',
+        'lang_ru': '[🇷🇺] Русский',
+        'lang_pl': '[🇵🇱] Polski',
+        'lang_es': '[🇪🇸] Español',
+        'lang_pt': '[🇧🇷] Português'
+      };
 
-    const targetRoleName = langMap[interaction.customId];
-    const role = guild.roles.cache.find(r => r.name === targetRoleName);
+      const targetRoleName = langMap[interaction.customId];
+      const role = guild.roles.cache.find(r => r.name === targetRoleName);
 
-    if (!role) return interaction.reply({ content: 'Language role not found.', ephemeral: true });
+      if (!role) return interaction.reply({ content: 'Language role not found.', ephemeral: true });
 
-    try {
-      if (member.roles.cache.has(role.id)) {
-        await member.roles.remove(role);
-        return interaction.reply({ content: `Removed **${targetRoleName}** channel access.`, ephemeral: true });
-      } else {
-        await member.roles.add(role);
-        return interaction.reply({ content: `Unlocked **${targetRoleName}** channel in **🌐 INTERNATIONAL SECTORS**!`, ephemeral: true });
-      }
-    } catch (err) {
-      return interaction.reply({ content: 'Failed to update language role.', ephemeral: true });
-    }
-  }
-
-  // Staff roles for tickets
-  const adminRole = guild.roles.cache.find(r => r.name.includes('Aegis Director'));
-  const wardenRole = guild.roles.cache.find(r => r.name.includes('Bunker Warden'));
-
-  // 4. Ticket Creation Button
-  if (interaction.customId === 'create_ticket') {
-    let ticketCategory = guild.channels.cache.find(c => c.name === '🎫 ACTIVE TICKETS' && c.type === ChannelType.GuildCategory);
-    if (!ticketCategory) {
       try {
-        ticketCategory = await guild.channels.create({
-          name: '🎫 ACTIVE TICKETS',
-          type: ChannelType.GuildCategory
-        });
+        if (member.roles.cache.has(role.id)) {
+          await member.roles.remove(role);
+          return interaction.reply({ content: `Removed **${targetRoleName}** channel access.`, ephemeral: true });
+        } else {
+          await member.roles.add(role);
+          return interaction.reply({ content: `Unlocked **${targetRoleName}** channel in **🌐 INTERNATIONAL SECTORS**!`, ephemeral: true });
+        }
       } catch (err) {
-        return interaction.reply({ content: 'Failed to create ticket category.', ephemeral: true });
+        return interaction.reply({ content: 'Failed to update language role.', ephemeral: true });
       }
     }
-    
-    const ticketChannelName = `ticket-${user.username.toLowerCase()}`;
-    const existingChannel = guild.channels.cache.find(c => c.name === ticketChannelName && c.parentId === ticketCategory.id);
-    if (existingChannel) {
-      return interaction.reply({ content: `You already have an open ticket: <#${existingChannel.id}>`, ephemeral: true });
-    }
+
+    // Staff roles for tickets
+    const adminRole = guild.roles.cache.find(r => r.name.includes('Aegis Director'));
+    const wardenRole = guild.roles.cache.find(r => r.name.includes('Bunker Warden'));
+
+    // 4. Ticket Creation Button (With Anti-Duplication Lock)
+    if (interaction.customId === 'create_ticket') {
+      const ticketChannelName = `ticket-${user.username.toLowerCase()}`;
+      const existingChannel = guild.channels.cache.find(c => c.name.toLowerCase() === ticketChannelName.toLowerCase());
+      if (existingChannel) {
+        return interaction.reply({ content: `You already have an active support ticket: <#${existingChannel.id}>`, ephemeral: true });
+      }
+
+      let ticketCategory = guild.channels.cache.find(c => c.name.includes('ACTIVE TICKETS') && c.type === ChannelType.GuildCategory);
+      if (!ticketCategory) {
+        try {
+          ticketCategory = await guild.channels.create({
+            name: '🎫 ACTIVE TICKETS',
+            type: ChannelType.GuildCategory
+          });
+        } catch (err) {
+          return interaction.reply({ content: 'Failed to create ticket category.', ephemeral: true });
+        }
+      }
     
     try {
       const channel = await guild.channels.create({
