@@ -152,9 +152,10 @@ client.on('interactionCreate', async interaction => {
   const guild = interaction.guild;
   const user = interaction.user;
 
-  // 1. Modal Submission Handling (Close Ticket with Reason)
+  // 1. Modal Submission Handling (Close Ticket with Name & Reason)
   if (interaction.isModalSubmit()) {
     if (interaction.customId === 'modal_close_ticket') {
+      const userName = interaction.fields.getTextInputValue('ticket_user_name') || 'Unknown';
       const reason = interaction.fields.getTextInputValue('close_reason') || 'No reason specified';
       const channel = interaction.channel;
       const closedBy = interaction.user;
@@ -166,16 +167,19 @@ client.on('interactionCreate', async interaction => {
           .setColor('#E74C3C')
           .addFields(
             { name: '🎫 Ticket Channel', value: `\`#${channel.name}\``, inline: true },
+            { name: '👤 User / Player Name', value: `\`${userName}\``, inline: true },
             { name: '🛡️ Closed By', value: `<@${closedBy.id}> (${closedBy.tag})`, inline: true },
             { name: '📝 Reason for Closure', value: `\`\`\`${reason}\`\`\``, inline: false }
           )
           .setTimestamp()
-          .setFooter({ text: 'A.E.G.I.S. Support System' });
+          .setFooter({ text: 'A.E.G.I.S. Secure Staff Audit' });
 
         await logsChannel.send({ embeds: [logEmbed] }).catch(() => {});
       }
 
-      await interaction.reply({ content: `🔒 **Ticket Closed.** Reason: *"${reason}"*\nDeleting channel in 5 seconds...` });
+      await interaction.reply({ 
+        content: `🔒 **Ticket Closed.**\n👤 **User:** \`${userName}\`\n📝 **Reason:** *"${reason}"*\n\n*Closing and deleting channel in 5 seconds...*` 
+      });
 
       setTimeout(async () => {
         try {
@@ -442,23 +446,37 @@ client.on('interactionCreate', async interaction => {
     } catch (err) {}
   }
 
-  // 6. Ticket Close Button (Opens Reason Modal)
+  // 6. Ticket Close Button (Staff Only - Opens Name & Reason Modal)
   if (interaction.customId === 'close_ticket') {
+    const hasStaffRole = member.roles.cache.some(r => r.name.includes('Aegis Director') || r.name.includes('Bunker Warden'));
+    if (!hasStaffRole) {
+      return interaction.reply({ content: '❌ Access Denied: Only Bunker Wardens and Aegis Directors can close tickets!', ephemeral: true });
+    }
+
     const modal = new ModalBuilder()
       .setCustomId('modal_close_ticket')
       .setTitle('Close Support Ticket');
 
+    const nameInput = new TextInputBuilder()
+      .setCustomId('ticket_user_name')
+      .setLabel('Name :')
+      .setStyle(TextInputStyle.Short)
+      .setPlaceholder('Player username or ticket reference')
+      .setValue(interaction.channel.name.replace('ticket-', ''))
+      .setRequired(true);
+
     const reasonInput = new TextInputBuilder()
       .setCustomId('close_reason')
-      .setLabel('Reason for closing this ticket')
+      .setLabel('Reason :')
       .setStyle(TextInputStyle.Paragraph)
-      .setPlaceholder('e.g. Issue resolved, player assisted, duplicate ticket...')
+      .setPlaceholder('Describe the resolution or why this ticket is being closed...')
       .setRequired(true)
       .setMinLength(3)
       .setMaxLength(500);
 
-    const actionRow = new ActionRowBuilder().addComponents(reasonInput);
-    modal.addComponents(actionRow);
+    const row1 = new ActionRowBuilder().addComponents(nameInput);
+    const row2 = new ActionRowBuilder().addComponents(reasonInput);
+    modal.addComponents(row1, row2);
 
     return interaction.showModal(modal);
   }
