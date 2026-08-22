@@ -138,6 +138,14 @@ client.once('ready', async () => {
     } catch (err) {}
   }
 
+  // Emergency fallback channel setup: Hide when online
+  const emergencyChannel = guild.channels.cache.find(c => c.name.includes('manual-roles'));
+  if (emergencyChannel) {
+    await emergencyChannel.permissionOverwrites.edit(guild.roles.everyone.id, {
+      ViewChannel: false
+    }).catch(() => {});
+  }
+
   console.log('[A.E.G.I.S. Mainframe] System fully operational.');
 });
 
@@ -519,6 +527,35 @@ client.on('interactionCreate', async interaction => {
     return interaction.showModal(modal);
   }
 });
+
+// Graceful Shutdown & Emergency Manual Protocol
+async function handleShutdown(signal) {
+  console.log(`[A.E.G.I.S. Mainframe] Received ${signal}. Engaging Emergency Manual Role Allocation Protocol...`);
+  try {
+    const guild = await client.guilds.fetch(GUILD_ID);
+    if (guild) {
+      const emergencyChannel = guild.channels.cache.find(c => c.name.includes('manual-roles'));
+      if (emergencyChannel) {
+        // Unlock channel for @everyone
+        await emergencyChannel.permissionOverwrites.edit(guild.roles.everyone.id, {
+          ViewChannel: true,
+          SendMessages: true,
+          ReadMessageHistory: true
+        });
+
+        await emergencyChannel.send({
+          content: `# 🚨 A.E.G.I.S. MAINFRAME OFFLINE — MANUAL PROTOCOL ENGAGED\n> *The automated verification and role distribution grid is temporarily offline for maintenance or server restart.*\n\n**Survivors, please post your desired roles below:**\n- 🧬 **Your In-Game Class** (Assault Soldier, Medic, Engineer, Miner, Marksman, Armorer, Commando, Virologist, Radiant Symbiote)\n- 🌐 **Your Language** (English, French, German, Russian, Polish, Spanish, Portuguese)\n\n🛡️ Our **Bunker Wardens** and **Directors** will assign your roles and unlock your sector channels manually!`
+        });
+      }
+    }
+  } catch (err) {
+    console.error('Error during emergency shutdown notice:', err);
+  }
+  process.exit(0);
+}
+
+process.on('SIGTERM', () => handleShutdown('SIGTERM'));
+process.on('SIGINT', () => handleShutdown('SIGINT'));
 
 // Global crash prevention & 24/7 Keep-Alive
 process.on('unhandledRejection', (reason, promise) => {
