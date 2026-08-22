@@ -174,7 +174,7 @@ client.on('interactionCreate', async interaction => {
       try {
         await member.roles.add(survivorRole);
         return interaction.reply({ 
-          content: `✅ **Protocole Validé / Verification Complete!**\nBienvenue dans le Secteur-4, Survivant. Vous avez débloqué l'accès au Bunker !\n\n👉 **Étapes suivantes :**\n1. Rendez-vous dans ${classLink} pour choisir vos classes de combat.\n2. Rendez-vous dans ${langLink} pour débloquer votre salon de discussion par langue !`, 
+          content: `✅ **Protocol Verified / Access Granted!**\nWelcome to Sector-4, Survivor. You have unlocked full access to the Bunker!\n\n👉 **Next Steps:**\n1. Head over to ${classLink} to choose your in-game combat classes.\n2. Head over to ${langLink} to unlock your localized language lounge!`, 
           ephemeral: true 
         });
       } catch (err) {
