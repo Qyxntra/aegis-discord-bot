@@ -1,4 +1,4 @@
-const { Client, GatewayIntentBits, ChannelType, PermissionFlagsBits, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } = require('discord.js');
+const { Client, GatewayIntentBits, ChannelType, PermissionFlagsBits, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
 const http = require('http');
 
 // Lightweight HTTP server for Cloud Hosting platforms (Render / Koyeb / Railway)
@@ -149,10 +149,45 @@ client.once('ready', async () => {
 
 // Handle Interactions
 client.on('interactionCreate', async interaction => {
-  if (!interaction.isButton()) return;
-
   const guild = interaction.guild;
   const user = interaction.user;
+
+  // 1. Modal Submission Handling (Close Ticket with Reason)
+  if (interaction.isModalSubmit()) {
+    if (interaction.customId === 'modal_close_ticket') {
+      const reason = interaction.fields.getTextInputValue('close_reason') || 'No reason specified';
+      const channel = interaction.channel;
+      const closedBy = interaction.user;
+
+      const logsChannel = guild.channels.cache.find(c => c.name.includes('ticket-logs'));
+      if (logsChannel) {
+        const logEmbed = new EmbedBuilder()
+          .setTitle('🔒 Ticket Closed & Archived')
+          .setColor('#E74C3C')
+          .addFields(
+            { name: '🎫 Ticket Channel', value: `\`#${channel.name}\``, inline: true },
+            { name: '🛡️ Closed By', value: `<@${closedBy.id}> (${closedBy.tag})`, inline: true },
+            { name: '📝 Reason for Closure', value: `\`\`\`${reason}\`\`\``, inline: false }
+          )
+          .setTimestamp()
+          .setFooter({ text: 'A.E.G.I.S. Support System' });
+
+        await logsChannel.send({ embeds: [logEmbed] }).catch(() => {});
+      }
+
+      await interaction.reply({ content: `🔒 **Ticket Closed.** Reason: *"${reason}"*\nDeleting channel in 5 seconds...` });
+
+      setTimeout(async () => {
+        try {
+          await channel.delete();
+        } catch (err) {}
+      }, 5000);
+      return;
+    }
+  }
+
+  if (!interaction.isButton()) return;
+
   const member = await guild.members.fetch(user.id);
 
   // 0. Rules Verification Button
@@ -407,22 +442,25 @@ client.on('interactionCreate', async interaction => {
     } catch (err) {}
   }
 
-  // 6. Ticket Close Button
+  // 6. Ticket Close Button (Opens Reason Modal)
   if (interaction.customId === 'close_ticket') {
-    const channel = interaction.channel;
-    
-    const logsChannel = guild.channels.cache.find(c => c.name.includes('ticket-logs'));
-    if (logsChannel) {
-      await logsChannel.send(`🔒 **Ticket Closed**: \`#${channel.name}\` closed by <@${user.id}> (${user.tag})`);
-    }
-    
-    await interaction.reply({ content: 'Closing ticket in 5 seconds...' });
-    
-    setTimeout(async () => {
-      try {
-        await channel.delete();
-      } catch (err) {}
-    }, 5000);
+    const modal = new ModalBuilder()
+      .setCustomId('modal_close_ticket')
+      .setTitle('Close Support Ticket');
+
+    const reasonInput = new TextInputBuilder()
+      .setCustomId('close_reason')
+      .setLabel('Reason for closing this ticket')
+      .setStyle(TextInputStyle.Paragraph)
+      .setPlaceholder('e.g. Issue resolved, player assisted, duplicate ticket...')
+      .setRequired(true)
+      .setMinLength(3)
+      .setMaxLength(500);
+
+    const actionRow = new ActionRowBuilder().addComponents(reasonInput);
+    modal.addComponents(actionRow);
+
+    return interaction.showModal(modal);
   }
 });
 
