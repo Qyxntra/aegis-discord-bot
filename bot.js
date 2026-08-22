@@ -1,4 +1,14 @@
 const { Client, GatewayIntentBits, ChannelType, PermissionFlagsBits, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } = require('discord.js');
+const http = require('http');
+
+// Lightweight HTTP server for Cloud Hosting platforms (Render / Koyeb / Railway)
+const PORT = process.env.PORT || 3000;
+http.createServer((req, res) => {
+  res.writeHead(200, { 'Content-Type': 'text/plain' });
+  res.end('A.E.G.I.S. Mainframe Core: ONLINE 24/7\n');
+}).listen(PORT, () => {
+  console.log(`[A.E.G.I.S. Web Keep-Alive] Listening on port ${PORT}`);
+});
 
 const client = new Client({
   intents: [
